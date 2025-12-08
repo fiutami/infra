@@ -1,0 +1,56 @@
+name: Reusable SSH Deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+        description: 'Target environment (dev/stage/prod)'
+      compose_file:
+        required: true
+        type: string
+        description: 'Docker compose filename'
+      deploy_path:
+        required: false
+        type: string
+        default: '/opt/fiutami'
+    secrets:
+      SSH_PRIVATE_KEY:
+        required: true
+      SSH_HOST:
+        required: true
+      SSH_USER:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Deploy via SSH
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          DEPLOY_PATH: ${{ inputs.deploy_path }}
+          COMPOSE_FILE: ${{ inputs.compose_file }}
+        run: |
+          ssh -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} << 'ENDSSH'
+            cd ${DEPLOY_PATH}
+            docker compose -f ${COMPOSE_FILE} pull
+            docker compose -f ${COMPOSE_FILE} up -d --remove-orphans
+            docker system prune -f
+          ENDSSH
+
+      - name: Health Check
+        run: |
+          echo "Waiting for service to be healthy..."
+          sleep 30
+          # Add actual health check here

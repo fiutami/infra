@@ -1,0 +1,60 @@
+version: '3.8'
+
+# Fiutami MVP - Local Test Stack
+# Test locale delle immagini GHCR
+
+services:
+  frontend:
+    image: ghcr.io/fra-itc/fiutami/frontend:latest
+    container_name: fiutami-frontend-local
+    ports:
+      - "4200:80"
+    networks:
+      - fiutami-local
+
+  backend:
+    image: ghcr.io/fra-itc/fiutami/backend:latest
+    container_name: fiutami-backend-local
+    ports:
+      - "5000:5000"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Server=db;Database=fiutami;User=sa;Password=Fiutami123!;TrustServerCertificate=True
+      - Jwt__SecretKey=FiutamiLocalDevSecretKey2024SuperSecure32Chars!
+      - Jwt__Issuer=Fiutami
+      - Jwt__Audience=FiutamiApp
+      - Jwt__AccessTokenExpirationMinutes=15
+      - Jwt__RefreshTokenExpirationDays=7
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - fiutami-local
+
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: fiutami-db-local
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=Fiutami123!
+      - MSSQL_PID=Express
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql-local-data:/var/opt/mssql
+    networks:
+      - fiutami-local
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "Fiutami123!" -C -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+networks:
+  fiutami-local:
+    driver: bridge
+
+volumes:
+  mssql-local-data:
+    driver: local

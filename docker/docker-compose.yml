@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ./src
+      dockerfile: Dockerfile
+    image: fiutami-frontend:latest
+    container_name: fiutami-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - fiutami-network
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: fiutami-backend:latest
+    container_name: fiutami-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Server=fiutami-db;Database=fiutami;User=sa;Password=Fiutami123!;TrustServerCertificate=True
+      - Jwt__SecretKey=${JWT_SECRET:-FiutamiProductionSecretKey32CharactersMinimumRequired2024}
+      - Jwt__Issuer=Fiutami
+      - Jwt__Audience=FiutamiApp
+      - Jwt__AccessTokenExpirationMinutes=15
+      - Jwt__RefreshTokenExpirationDays=7
+    depends_on:
+      - db
+    networks:
+      - fiutami-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: fiutami-db
+    ports:
+      - "1433:1433"
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=Fiutami123!
+      - MSSQL_PID=Express
+    volumes:
+      - mssql-data:/var/opt/mssql
+    networks:
+      - fiutami-network
+    restart: unless-stopped
+    healthcheck:
+      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "Fiutami123!" -Q "SELECT 1" || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  redis:
+    image: redis:alpine
+    container_name: fiutami-redis
+    networks:
+      - fiutami-network
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: fiutami-nginx
+    ports:
+      - "8081:80"
+      - "8443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - fiutami-network
+    restart: unless-stopped
+
+networks:
+  fiutami-network:
+    driver: bridge
+
+volumes:
+  mssql-data:
+    driver: local

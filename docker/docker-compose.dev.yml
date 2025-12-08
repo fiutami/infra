@@ -1,0 +1,70 @@
+version: '3.8'
+
+# Fiutami DEV Stack - NAS (192.168.169.11)
+# Frontend: http://192.168.169.11:4201
+# Backend:  http://192.168.169.11:5062
+# DB:       192.168.169.11:1434
+
+services:
+  frontend:
+    image: ghcr.io/fra-itc/fiutami/frontend:dev
+    container_name: fiutami-frontend-dev
+    restart: unless-stopped
+    ports:
+      - "4201:80"
+    networks:
+      - fiutami-dev
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  backend:
+    image: ghcr.io/fra-itc/fiutami/backend:dev
+    container_name: fiutami-backend-dev
+    restart: unless-stopped
+    ports:
+      - "5062:5000"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5000
+      - ConnectionStrings__DefaultConnection=Server=fiutami-db-dev;Database=fiutami_dev;User=sa;Password=${DB_PASSWORD:-FiutamiDev123!};TrustServerCertificate=True
+      - Jwt__SecretKey=${JWT_SECRET:-FiutamiDevSecretKey32CharactersMinimum!}
+      - Jwt__Issuer=Fiutami
+      - Jwt__Audience=FiutamiApp
+      - OAuth__Google__ClientId=384947883378-eghthqhqvoau0m0ubqstvr9baq0pbtbb.apps.googleusercontent.com
+    depends_on:
+      - db
+    networks:
+      - fiutami-dev
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: fiutami-db-dev
+    restart: unless-stopped
+    user: root
+    ports:
+      - "1434:1433"
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=${DB_PASSWORD:-FiutamiDev123!}
+      - MSSQL_PID=Express
+    volumes:
+      - mssql-dev-data:/var/opt/mssql
+    networks:
+      - fiutami-dev
+
+networks:
+  fiutami-dev:
+    driver: bridge
+
+volumes:
+  mssql-dev-data:

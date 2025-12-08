@@ -1,0 +1,44 @@
+name: Trigger E2E Tests
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      source_repo:
+        required: true
+        type: string
+      source_sha:
+        required: true
+        type: string
+    secrets:
+      E2E_DISPATCH_TOKEN:
+        required: true
+        description: 'PAT with repo scope for testing repo'
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger E2E tests
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          token: ${{ secrets.E2E_DISPATCH_TOKEN }}
+          repository: fiutami/testing
+          event-type: run-e2e
+          client-payload: |
+            {
+              "environment": "${{ inputs.environment }}",
+              "source_repo": "${{ inputs.source_repo }}",
+              "source_sha": "${{ inputs.source_sha }}",
+              "triggered_by": "${{ github.actor }}"
+            }
+
+      - name: Summary
+        run: |
+          echo "## E2E Tests Triggered" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Environment: ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Source: ${{ inputs.source_repo }}" >> $GITHUB_STEP_SUMMARY
+          echo "- SHA: ${{ inputs.source_sha }}" >> $GITHUB_STEP_SUMMARY

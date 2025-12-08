@@ -1,0 +1,86 @@
+version: '3.8'
+
+# Fiutami MVP - Production Stack per Portainer
+# Deploy su fiutami.pet
+
+services:
+  frontend:
+    image: ghcr.io/fra-itc/fiutami/frontend:latest
+    container_name: fiutami-frontend
+    restart: unless-stopped
+    networks:
+      - fiutami-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  backend:
+    image: ghcr.io/fra-itc/fiutami/backend:latest
+    container_name: fiutami-backend
+    restart: unless-stopped
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Server=fiutami-db;Database=fiutami;User=sa;Password=${DB_PASSWORD:-Fiutami123!};TrustServerCertificate=True
+      - Jwt__SecretKey=${JWT_SECRET}
+      - Jwt__Issuer=Fiutami
+      - Jwt__Audience=FiutamiApp
+      - Jwt__AccessTokenExpirationMinutes=15
+      - Jwt__RefreshTokenExpirationDays=7
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - fiutami-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: fiutami-db
+    restart: unless-stopped
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=${DB_PASSWORD:-Fiutami123!}
+      - MSSQL_PID=Express
+    volumes:
+      - mssql-data:/var/opt/mssql
+    networks:
+      - fiutami-network
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "${DB_PASSWORD:-Fiutami123!}" -C -Q "SELECT 1" || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  nginx:
+    image: nginx:alpine
+    container_name: fiutami-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./certbot/www:/var/www/certbot:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - fiutami-network
+
+networks:
+  fiutami-network:
+    driver: bridge
+
+volumes:
+  mssql-data:
+    driver: local
