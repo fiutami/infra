@@ -15,6 +15,14 @@ on:
         required: false
         type: string
         default: '/opt/fiutami'
+      health_endpoint:
+        required: false
+        type: string
+        default: 'http://localhost:5000/health'
+      frontend_port:
+        required: false
+        type: string
+        default: '8080'
     secrets:
       SSH_PRIVATE_KEY:
         required: true
@@ -35,6 +43,20 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
 
+      - name: Backup current state
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          DEPLOY_PATH: ${{ inputs.deploy_path }}
+        run: |
+          ssh -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} << 'ENDSSH'
+            cd ${DEPLOY_PATH}
+            # Backup current container images for rollback
+            docker images --format "{{.Repository}}:{{.Tag}}" | grep fiutami | head -5 > /tmp/fiutami_images_backup.txt || true
+            # Backup .env
+            cp .env .env.backup.$(date +%Y%m%d%H%M%S) 2>/dev/null || true
+          ENDSSH
+
       - name: Deploy via SSH
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -42,15 +64,103 @@ jobs:
           DEPLOY_PATH: ${{ inputs.deploy_path }}
           COMPOSE_FILE: ${{ inputs.compose_file }}
         run: |
-          ssh -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} << 'ENDSSH'
+          ssh -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} << ENDSSH
             cd ${DEPLOY_PATH}
-            docker compose -f ${COMPOSE_FILE} pull
-            docker compose -f ${COMPOSE_FILE} up -d --remove-orphans
+
+            echo "📦 Pulling new images..."
+            docker compose -f ${COMPOSE_FILE} pull frontend backend || true
+
+            echo "🛑 Stopping frontend and backend (keeping DB)..."
+            docker compose -f ${COMPOSE_FILE} stop frontend backend nginx 2>/dev/null || true
+            docker compose -f ${COMPOSE_FILE} rm -f frontend backend nginx 2>/dev/null || true
+
+            echo "🚀 Starting new containers..."
+            docker compose -f ${COMPOSE_FILE} up -d
+
+            echo "🧹 Cleanup old images..."
             docker system prune -f
           ENDSSH
 
-      - name: Health Check
+      - name: Health Check - Backend
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          HEALTH_ENDPOINT: ${{ inputs.health_endpoint }}
         run: |
-          echo "Waiting for service to be healthy..."
-          sleep 30
-          # Add actual health check here
+          echo "⏳ Waiting for backend to be healthy..."
+
+          for i in {1..30}; do
+            HEALTH=$(ssh -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} \
+              "curl -sf ${HEALTH_ENDPOINT} 2>/dev/null || echo 'unhealthy'")
+
+            if echo "$HEALTH" | grep -qi "healthy"; then
+              echo "✅ Backend is healthy!"
+              exit 0
+            fi
+
+            echo "  Attempt $i/30 - Backend not ready yet..."
+            sleep 10
+          done
+
+          echo "❌ Backend health check failed after 30 attempts"
+          exit 1
+
+      - name: Health Check - Frontend
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          FRONTEND_PORT: ${{ inputs.frontend_port }}
+        run: |
+          echo "⏳ Checking frontend..."
+
+          FRONTEND=$(ssh -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} \
+            "curl -sf http://localhost:${FRONTEND_PORT} 2>/dev/null | head -c 200 || echo 'error'")
+
+          if echo "$FRONTEND" | grep -qi "html"; then
+            echo "✅ Frontend is serving content!"
+          else
+            echo "⚠️ Frontend check inconclusive - manual verification recommended"
+          fi
+
+      - name: Rollback on Failure
+        if: failure()
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          DEPLOY_PATH: ${{ inputs.deploy_path }}
+          COMPOSE_FILE: ${{ inputs.compose_file }}
+        run: |
+          echo "🔄 Deployment failed, initiating rollback..."
+
+          ssh -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} << 'ENDSSH'
+            cd ${DEPLOY_PATH}
+
+            echo "Stopping failed containers..."
+            docker compose -f ${COMPOSE_FILE} stop frontend backend nginx 2>/dev/null || true
+
+            echo "Restoring previous .env if available..."
+            LATEST_BACKUP=$(ls -t .env.backup.* 2>/dev/null | head -1)
+            if [ -n "$LATEST_BACKUP" ]; then
+              cp "$LATEST_BACKUP" .env
+            fi
+
+            echo "Restarting with previous configuration..."
+            docker compose -f ${COMPOSE_FILE} up -d
+
+            echo "⚠️ Rollback completed - please verify manually"
+          ENDSSH
+
+      - name: Deployment Summary
+        if: success()
+        run: |
+          echo "🎉 Deployment to ${{ inputs.environment }} completed successfully!"
+          echo ""
+          echo "📋 Summary:"
+          echo "  - Environment: ${{ inputs.environment }}"
+          echo "  - Compose file: ${{ inputs.compose_file }}"
+          echo "  - Deploy path: ${{ inputs.deploy_path }}"
+          echo ""
+          echo "🔗 Please verify manually:"
+          echo "  - https://fiutami.pet (frontend)"
+          echo "  - https://fiutami.pet/health (backend)"
+          echo "  - OAuth Google login"

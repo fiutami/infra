@@ -1,26 +1,31 @@
 version: '3.8'
 
-# Fiutami MVP - Production Stack per Portainer
-# Deploy su fiutami.pet
+# Fiutami MVP - Production Stack
+# Deploy su fiutami.pet via Nginx Proxy Manager
+# Images from: ghcr.io/fiutami/*
 
 services:
   frontend:
-    image: ghcr.io/fra-itc/fiutami/frontend:latest
+    image: ghcr.io/fiutami/frontend:latest
     container_name: fiutami-frontend
     restart: unless-stopped
+    ports:
+      - "8080:80"  # Exposed for Nginx Proxy Manager
     networks:
       - fiutami-network
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
 
   backend:
-    image: ghcr.io/fra-itc/fiutami/backend:latest
+    image: ghcr.io/fiutami/backend:latest
     container_name: fiutami-backend
     restart: unless-stopped
+    ports:
+      - "5000:5000"  # Exposed for Nginx Proxy Manager
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__DefaultConnection=Server=fiutami-db;Database=fiutami;User=sa;Password=${DB_PASSWORD:-Fiutami123!};TrustServerCertificate=True
@@ -60,22 +65,11 @@ services:
       retries: 3
       start_period: 60s
 
-  nginx:
-    image: nginx:alpine
-    container_name: fiutami-nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-      - ./certbot/www:/var/www/certbot:ro
-    depends_on:
-      - frontend
-      - backend
-    networks:
-      - fiutami-network
+  # nginx interno rimosso - usare Nginx Proxy Manager esterno
+  # NPM deve puntare a:
+  # - frontend: localhost:8080
+  # - backend API: localhost:5000/api/
+  # - backend health: localhost:5000/health
 
 networks:
   fiutami-network:
