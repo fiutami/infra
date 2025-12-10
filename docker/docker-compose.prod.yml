@@ -1,44 +1,71 @@
-version: '3.8'
-
-# Fiutami MVP - Production Stack
-# Deploy su fiutami.pet via Nginx Proxy Manager
-# Images from: ghcr.io/fiutami/*
+# =============================================================================
+# Fiutami PRODUCTION Stack - fiutami.pet
+# =============================================================================
+# Frontend: Served via external Nginx Proxy Manager (NPM)
+# Backend:  Internal API, proxied through frontend nginx
+# DB:       localhost:1433 (internal)
+#
+# SECRETS CONFIGURATION:
+# ----------------------
+# Secrets MUST be configured in Portainer Stack environment variables.
+# See: docs/PORTAINER_SECRETS_SETUP.md
+#
+# Required variables in Portainer:
+#   - DB_PASSWORD          (Database SA password)
+#   - JWT_SECRET           (Min 32 characters)
+#   - GOOGLE_CLIENT_ID     (OAuth - optional)
+#   - FACEBOOK_APP_ID      (OAuth - optional)
+#   - FACEBOOK_APP_SECRET  (OAuth - optional)
+# =============================================================================
 
 services:
   frontend:
-    image: ghcr.io/fiutami/frontend:latest
+    image: ghcr.io/fiutami/fiutami/frontend:latest
     container_name: fiutami-frontend
     restart: unless-stopped
     ports:
-      - "8080:80"  # Exposed for Nginx Proxy Manager
+      - "8080:80"
     networks:
       - fiutami-network
+      - proxy-net
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
 
   backend:
-    image: ghcr.io/fiutami/backend:latest
+    image: ghcr.io/fiutami/fiutami/backend:latest
     container_name: fiutami-backend
     restart: unless-stopped
     ports:
-      - "5000:5000"  # Exposed for Nginx Proxy Manager
+      - "5000:5000"
     environment:
+      # Core settings
       - ASPNETCORE_ENVIRONMENT=Production
-      - ConnectionStrings__DefaultConnection=Server=fiutami-db;Database=fiutami;User=sa;Password=${DB_PASSWORD:-Fiutami123!};TrustServerCertificate=True
+      - ASPNETCORE_URLS=http://+:5000
+      # Database (SECRET - configure in Portainer)
+      - ConnectionStrings__DefaultConnection=Server=fiutami-db;Database=fiutami;User=sa;Password=${DB_PASSWORD};TrustServerCertificate=True
+      # JWT Authentication (SECRET - configure in Portainer)
       - Jwt__SecretKey=${JWT_SECRET}
       - Jwt__Issuer=Fiutami
       - Jwt__Audience=FiutamiApp
       - Jwt__AccessTokenExpirationMinutes=15
       - Jwt__RefreshTokenExpirationDays=7
+      # OAuth Providers (SECRETS - configure in Portainer)
+      - OAuth__Google__ClientId=${GOOGLE_CLIENT_ID:-}
+      - OAuth__Facebook__AppId=${FACEBOOK_APP_ID:-}
+      - OAuth__Facebook__AppSecret=${FACEBOOK_APP_SECRET:-}
+      # Security settings
+      - Security__RateLimiting__PermitLimit=5
+      - Security__RateLimiting__WindowSeconds=60
     depends_on:
       db:
         condition: service_healthy
     networks:
       - fiutami-network
+      - proxy-net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
@@ -50,31 +77,29 @@ services:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: fiutami-db
     restart: unless-stopped
+    ports:
+      - "1433:1433"
     environment:
       - ACCEPT_EULA=Y
-      - MSSQL_SA_PASSWORD=${DB_PASSWORD:-Fiutami123!}
+      - MSSQL_SA_PASSWORD=${DB_PASSWORD}
       - MSSQL_PID=Express
     volumes:
-      - mssql-data:/var/opt/mssql
+      - mssql-prod-data:/var/opt/mssql
     networks:
       - fiutami-network
     healthcheck:
-      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "${DB_PASSWORD:-Fiutami123!}" -C -Q "SELECT 1" || exit 1
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" || exit 1
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
       start_period: 60s
-
-  # nginx interno rimosso - usare Nginx Proxy Manager esterno
-  # NPM deve puntare a:
-  # - frontend: localhost:8080
-  # - backend API: localhost:5000/api/
-  # - backend health: localhost:5000/health
 
 networks:
   fiutami-network:
     driver: bridge
+  proxy-net:
+    external: true
 
 volumes:
-  mssql-data:
+  mssql-prod-data:
     driver: local

@@ -5,7 +5,7 @@ version: '3.8'
 
 services:
   frontend:
-    image: ghcr.io/fra-itc/fiutami/frontend:latest
+    image: ghcr.io/fiutami/fiutami/frontend:latest
     container_name: fiutami-frontend-local
     ports:
       - "4200:80"
@@ -13,7 +13,7 @@ services:
       - fiutami-local
 
   backend:
-    image: ghcr.io/fra-itc/fiutami/backend:latest
+    image: ghcr.io/fiutami/fiutami/backend:latest
     container_name: fiutami-backend-local
     ports:
       - "5000:5000"

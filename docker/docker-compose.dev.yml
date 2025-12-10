@@ -7,7 +7,7 @@ version: '3.8'
 
 services:
   frontend:
-    image: ghcr.io/fra-itc/fiutami/frontend:dev
+    image: ghcr.io/fiutami/fiutami/frontend:dev
     container_name: fiutami-frontend-dev
     restart: unless-stopped
     ports:
@@ -22,7 +22,7 @@ services:
       start_period: 10s
 
   backend:
-    image: ghcr.io/fra-itc/fiutami/backend:dev
+    image: ghcr.io/fiutami/fiutami/backend:dev
     container_name: fiutami-backend-dev
     restart: unless-stopped
     ports:

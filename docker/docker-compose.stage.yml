@@ -20,7 +20,7 @@
 
 services:
   frontend:
-    image: ghcr.io/fra-itc/fiutami/frontend:stage
+    image: ghcr.io/fiutami/fiutami/frontend:stage
     container_name: fiutami-frontend-stage
     restart: unless-stopped
     ports:
@@ -36,7 +36,7 @@ services:
       start_period: 10s
 
   backend:
-    image: ghcr.io/fra-itc/fiutami/backend:stage
+    image: ghcr.io/fiutami/fiutami/backend:stage
     container_name: fiutami-backend-stage
     restart: unless-stopped
     ports:
