@@ -1,24 +1,49 @@
-# CLAUDE.md - Fiutami Infrastructure
+# CLAUDE.md - Infrastructure
 
-## Context
-Infrastructure as Code for Fiutami. Contains Docker configurations, CI/CD workflows, and deployment scripts.
+## Contesto
+Configurazione Docker e CI/CD per FIUTAMI. Deploy su VPS con Nginx Proxy Manager.
 
 ## Stack
-- Docker & Docker Compose
+- Docker / Docker Compose
 - GitHub Actions
 - Nginx Proxy Manager
-- Hetzner VPS
+- PostgreSQL
+- Redis
 
-## Project Structure
+## Struttura
 ```
 fiutami-infra/
-├── docker/
-│   ├── local/           # Local dev compose
-│   ├── staging/         # Stage environment
-│   └── production/      # Prod environment
-├── scripts/             # Deployment scripts
-└── .github/workflows/   # Reusable GH Actions
+├── docker/              # Dockerfiles
+├── scripts/             # Deploy scripts
+├── .github/workflows/   # CI/CD
+│   ├── reusable-docker-build.yml
+│   ├── reusable-notify-e2e.yml
+│   └── reusable-ssh-deploy.yml
+└── .specs/              # ADRs
 ```
+
+## Comandi
+```bash
+docker compose up -d           # Start all services
+docker compose build --no-cache # Rebuild
+docker compose logs -f [service] # View logs
+docker compose down            # Stop all
+```
+
+## Services
+| Service | Port | Descrizione |
+|---------|------|-------------|
+| postgres | 5432 | Database |
+| redis | 6379 | Cache |
+| directus | 8055 | CMS |
+| backend | 5000 | API .NET |
+| frontend | 4200 | Angular PWA |
+
+## Deploy
+- VPS: 91.99.229.111
+- Path: /opt/fiutami/
+- Proxy: Nginx Proxy Manager
+- Domains: fiutami.pet, play.francescotrani.com
 
 ## Environments
 | Env | Branch | Deploy |
@@ -27,20 +52,12 @@ fiutami-infra/
 | Stage | stage | CI only |
 | Prod | main | CD to VPS |
 
-## Commands
-```bash
-# Local
-docker compose -f docker/local/docker-compose.yml up -d
+## Secrets (GitHub)
+- SSH_HOST, SSH_USER, SSH_KEY
+- DOCKER_REGISTRY_*
+- DB_PASSWORD
+- JWT_SECRET
 
-# Deploy
-./scripts/deploy.sh production
-```
-
-## VPS Info
-- IP: 91.99.229.111
-- Deploy dir: /opt/fiutami/
-- Domains: fiutami.pet, play.francescotrani.com
-
-## Links
-- Docs: https://github.com/fiutami/docs
-- Portainer: (internal)
+## Link
+- [Docs](https://github.com/fiutami/docs)
+- [ADR: Docker over K8s](./.specs/adr/001-docker-compose-over-k8s.md)
