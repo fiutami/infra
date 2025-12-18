@@ -1,63 +1,41 @@
 # CLAUDE.md - Infrastructure
 
-## Contesto
-Configurazione Docker e CI/CD per FIUTAMI. Deploy su VPS con Nginx Proxy Manager.
+## Questo Repo
+**Path:** `/home/frisco/projects/fiutami-infra`
+**Stack:** Docker, GitHub Actions, Nginx Proxy Manager
 
-## Stack
-- Docker / Docker Compose
-- GitHub Actions
-- Nginx Proxy Manager
-- PostgreSQL
-- Redis
+## Org FIUTAMI
+| Repo | Path | Cosa fa |
+|------|------|---------|
+| frontend | `fiutami-frontend` | Angular PWA |
+| backend | `fiutami-backend` | .NET 8 API |
+| backoffice | `fiutami-backoffice` | Directus CMS |
+| **infra** | `fiutami-infra` ← SEI QUI | Docker, CI/CD |
+| testing | `fiutami-testing` | Playwright E2E |
+| docs | `fiutami-docs` | Documentazione |
 
-## Struttura
-```
-fiutami-infra/
-├── docker/              # Dockerfiles
-├── scripts/             # Deploy scripts
-├── .github/workflows/   # CI/CD
-│   ├── reusable-docker-build.yml
-│   ├── reusable-notify-e2e.yml
-│   └── reusable-ssh-deploy.yml
-└── .specs/              # ADRs
-```
+## Dove Lavoro
+| Task | Path |
+|------|------|
+| Dockerfiles | `docker/` |
+| Deploy scripts | `scripts/` |
+| CI/CD workflows | `.github/workflows/` |
+| ADRs | `.specs/` |
 
 ## Comandi
 ```bash
-docker compose up -d           # Start all services
-docker compose build --no-cache # Rebuild
-docker compose logs -f [service] # View logs
-docker compose down            # Stop all
+docker compose up -d            # Start all
+docker compose logs -f [svc]    # Logs
+docker compose down             # Stop
 ```
 
-## Services
-| Service | Port | Descrizione |
-|---------|------|-------------|
-| postgres | 5432 | Database |
-| redis | 6379 | Cache |
-| directus | 8055 | CMS |
-| backend | 5000 | API .NET |
-| frontend | 4200 | Angular PWA |
-
 ## Deploy
-- VPS: 91.99.229.111
-- Path: /opt/fiutami/
-- Proxy: Nginx Proxy Manager
-- Domains: fiutami.pet, play.francescotrani.com
+VPS: `91.99.229.111` | Path: `/opt/fiutami/`
+Domains: `fiutami.pet`, `play.francescotrani.com`
 
 ## Environments
-| Env | Branch | Deploy |
-|-----|--------|--------|
-| Dev | any | localhost |
-| Stage | stage | CI only |
-| Prod | main | CD to VPS |
-
-## Secrets (GitHub)
-- SSH_HOST, SSH_USER, SSH_KEY
-- DOCKER_REGISTRY_*
-- DB_PASSWORD
-- JWT_SECRET
-
-## Link
-- [Docs](https://github.com/fiutami/docs)
-- [ADR: Docker over K8s](./.specs/adr/001-docker-compose-over-k8s.md)
+| Branch | Deploy |
+|--------|--------|
+| any | localhost |
+| stage | CI only |
+| main | CD → VPS |
