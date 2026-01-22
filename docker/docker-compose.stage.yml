@@ -36,7 +36,7 @@ services:
       start_period: 10s
 
   backend:
-    image: ghcr.io/fiutami/fiutami/backend:stage
+    image: ghcr.io/fiutami/backend:latest
     container_name: fiutami-backend-stage
     restart: unless-stopped
     ports:
