@@ -66,19 +66,34 @@ docker compose -f docker-compose.prod.yml logs -f [service]
 ```
 
 ## Deploy
+
+### Staging
 | Key | Value |
 |-----|-------|
-| VPS | `91.99.229.111` |
-| Path | `/opt/fiutami/` |
-| Domains | `fiutami.pet`, `play.francescotrani.com` |
-| Registry | `ghcr.io/fiutami/*` |
+| Server | LEXe |
+| IP | `91.99.229.111` |
+| Path | `/opt/fiutami` |
+| Compose Project | `fiutami-stage` |
+| Domains | `stage.fiutami.pet`, `api.stage.fiutami.pet`, `bo.stage.fiutami.pet` |
+
+### Production
+| Key | Value |
+|-----|-------|
+| Server | Hetzner |
+| IP | `49.12.85.92` |
+| Path | `/opt/fra/fiutami` |
+| Compose Project | `fiutami-prod` |
+| Domains | `fiutami.pet`, `api.fiutami.pet`, `bo.fiutami.pet` |
+
+### Registry
+`ghcr.io/fiutami/*` con tag `sha-*`, `stage`, `prod`
 
 ## Environments
-| Branch | Deploy |
-|--------|--------|
+| Branch | Deploy Target |
+|--------|---------------|
 | any | localhost |
-| stage | CI only |
-| main | CD → VPS |
+| develop/stage | Staging (91.99.229.111) |
+| main | Production (49.12.85.92) |
 
 ## Org FIUTAMI
 | Repo | Cosa fa |

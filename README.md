@@ -38,11 +38,19 @@ jobs:
 
 ## Environments
 
-| Environment | Branch | URL |
-|-------------|--------|-----|
-| Production | `main` | https://fiutami.pet |
-| Staging | `stage` | https://stage.fiutami.pet |
-| Development | `dev` | Local only |
+| Environment | Server | IP | Branch | URL |
+|-------------|--------|-----|--------|-----|
+| Production | Hetzner | `49.12.85.92` | `main` | https://fiutami.pet |
+| Staging | LEXe | `91.99.229.111` | `develop` | https://stage.fiutami.pet |
+| Development | Local | - | any | localhost |
+
+### Porte per Ambiente
+
+| Service | Staging | Production |
+|---------|---------|------------|
+| Frontend | 8082 | 8080 |
+| Backend | 5001 | 5000 |
+| Backoffice | 8055 | 8055 |
 
 ## Quick Start
 
