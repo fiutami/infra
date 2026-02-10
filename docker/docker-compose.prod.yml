@@ -1,71 +1,59 @@
 # =============================================================================
-# Fiutami PRODUCTION Stack - fiutami.pet
+# Fiutami PRODUCTION Stack - 49.12.85.92 (Hetzner)
 # =============================================================================
-# Frontend: Served via external Nginx Proxy Manager (NPM)
-# Backend:  Internal API, proxied through frontend nginx
-# DB:       localhost:1433 (internal)
+# Deploy: docker compose -p fiutami-prod -f docker-compose.prod.yml up -d <service>
+# Frontend: https://fiutami.pet (port 8080)
+# Backend:  https://api.fiutami.pet (port 5000)
+# Backoffice: https://bo.fiutami.pet (port 8055)
+# DB: internal only
 #
-# SECRETS CONFIGURATION:
-# ----------------------
-# Secrets MUST be configured in Portainer Stack environment variables.
-# See: docs/PORTAINER_SECRETS_SETUP.md
-#
-# Required variables in Portainer:
-#   - DB_PASSWORD          (Database SA password)
-#   - JWT_SECRET           (Min 32 characters)
-#   - GOOGLE_CLIENT_ID     (OAuth - optional)
-#   - FACEBOOK_APP_ID      (OAuth - optional)
-#   - FACEBOOK_APP_SECRET  (OAuth - optional)
+# IMAGE_TAG: Use environment variable to specify exact image version
+# Example: IMAGE_TAG=sha-abc123 docker compose -p fiutami-prod up -d frontend
 # =============================================================================
 
 services:
   frontend:
-    image: ghcr.io/fiutami/fiutami/frontend:latest
-    container_name: fiutami-frontend
+    image: ghcr.io/fiutami/frontend:${IMAGE_TAG:-prod}
+    container_name: fiutami-frontend-prod
     restart: unless-stopped
     ports:
       - "8080:80"
     networks:
-      - fiutami-network
-      - proxy-net
+      - fiutami-prod
+      - shared_public
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
 
   backend:
-    image: ghcr.io/fiutami/fiutami/backend:latest
-    container_name: fiutami-backend
+    image: ghcr.io/fiutami/backend:${IMAGE_TAG:-prod}
+    container_name: fiutami-backend-prod
     restart: unless-stopped
     ports:
       - "5000:5000"
     environment:
-      # Core settings
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:5000
-      # Database (SECRET - configure in Portainer)
-      - ConnectionStrings__DefaultConnection=Server=fiutami-db;Database=fiutami;User=sa;Password=${DB_PASSWORD};TrustServerCertificate=True
-      # JWT Authentication (SECRET - configure in Portainer)
+      - ConnectionStrings__DefaultConnection=Server=fiutami-db-prod;Database=fiutami_prod;User=sa;Password=${DB_PASSWORD};TrustServerCertificate=True
       - Jwt__SecretKey=${JWT_SECRET}
       - Jwt__Issuer=Fiutami
       - Jwt__Audience=FiutamiApp
       - Jwt__AccessTokenExpirationMinutes=15
       - Jwt__RefreshTokenExpirationDays=7
-      # OAuth Providers (SECRETS - configure in Portainer)
       - OAuth__Google__ClientId=${GOOGLE_CLIENT_ID:-}
       - OAuth__Facebook__AppId=${FACEBOOK_APP_ID:-}
       - OAuth__Facebook__AppSecret=${FACEBOOK_APP_SECRET:-}
-      # Security settings
       - Security__RateLimiting__PermitLimit=5
       - Security__RateLimiting__WindowSeconds=60
     depends_on:
       db:
         condition: service_healthy
     networks:
-      - fiutami-network
-      - proxy-net
+      - fiutami-prod
+      - shared_public
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
@@ -75,10 +63,9 @@ services:
 
   db:
     image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: fiutami-db
+    container_name: fiutami-db-prod
     restart: unless-stopped
-    ports:
-      - "1433:1433"
+    # NO port exposed externally for security
     environment:
       - ACCEPT_EULA=Y
       - MSSQL_SA_PASSWORD=${DB_PASSWORD}
@@ -86,18 +73,49 @@ services:
     volumes:
       - mssql-prod-data:/var/opt/mssql
     networks:
-      - fiutami-network
+      - fiutami-prod
     healthcheck:
-      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" || exit 1
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$${MSSQL_SA_PASSWORD}" -C -Q "SELECT 1" || exit 1
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 60s
 
+  backoffice:
+    image: ghcr.io/fiutami/backoffice:${IMAGE_TAG:-prod}
+    container_name: fiutami-backoffice-prod
+    restart: unless-stopped
+    ports:
+      - "8055:8055"
+    environment:
+      - DB_CLIENT=mssql
+      - DB_HOST=fiutami-db-prod
+      - DB_PORT=1433
+      - DB_DATABASE=fiutami_prod
+      - DB_USER=sa
+      - DB_PASSWORD=${DB_PASSWORD}
+      - KEY=${DIRECTUS_KEY}
+      - SECRET=${DIRECTUS_SECRET}
+      - ADMIN_EMAIL=${DIRECTUS_ADMIN_EMAIL:-admin@fiutami.pet}
+      - ADMIN_PASSWORD=${DIRECTUS_ADMIN_PASSWORD:-}
+      - PUBLIC_URL=https://bo.fiutami.pet
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - fiutami-prod
+      - shared_public
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8055/server/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
 networks:
-  fiutami-network:
+  fiutami-prod:
     driver: bridge
-  proxy-net:
+  shared_public:
     external: true
 
 volumes:
