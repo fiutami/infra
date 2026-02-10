@@ -1,26 +1,19 @@
 # =============================================================================
-# Fiutami STAGE Stack - play.francescotrani.com
+# Fiutami STAGE Stack - 91.99.229.111 (LEXe)
 # =============================================================================
-# Frontend: http://play.francescotrani.com:8082
-# Backend:  http://play.francescotrani.com:5001
-# DB:       localhost:1435 (internal)
+# Deploy: docker compose -p fiutami-stage -f docker-compose.stage.yml up -d <service>
+# Frontend: https://stage.fiutami.pet (port 8082)
+# Backend:  https://api.stage.fiutami.pet (port 5001)
+# Backoffice: https://bo.stage.fiutami.pet (port 8055)
+# DB: internal only
 #
-# SECRETS CONFIGURATION:
-# ----------------------
-# Secrets MUST be configured in Portainer Stack environment variables.
-# See: docs/PORTAINER_SECRETS_SETUP.md
-#
-# Required variables in Portainer:
-#   - DB_PASSWORD          (Database SA password)
-#   - JWT_SECRET           (Min 32 characters)
-#   - GOOGLE_CLIENT_ID     (OAuth - optional)
-#   - FACEBOOK_APP_ID      (OAuth - optional)
-#   - FACEBOOK_APP_SECRET  (OAuth - optional)
+# IMAGE_TAG: Use environment variable to specify exact image version
+# Example: IMAGE_TAG=sha-abc123 docker compose -p fiutami-stage up -d frontend
 # =============================================================================
 
 services:
   frontend:
-    image: ghcr.io/fiutami/fiutami/frontend:stage
+    image: ghcr.io/fiutami/frontend:${IMAGE_TAG:-stage}
     container_name: fiutami-frontend-stage
     restart: unless-stopped
     ports:
@@ -29,35 +22,30 @@ services:
       - fiutami-stage
       - proxy-net
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
 
   backend:
-    image: ghcr.io/fiutami/backend:latest
+    image: ghcr.io/fiutami/backend:${IMAGE_TAG:-stage}
     container_name: fiutami-backend-stage
     restart: unless-stopped
     ports:
       - "5001:5000"
     environment:
-      # Core settings
       - ASPNETCORE_ENVIRONMENT=Staging
       - ASPNETCORE_URLS=http://+:5000
-      # Database (SECRET - configure in Portainer)
       - ConnectionStrings__DefaultConnection=Server=fiutami-db-stage;Database=fiutami_stage;User=sa;Password=${DB_PASSWORD};TrustServerCertificate=True
-      # JWT Authentication (SECRET - configure in Portainer)
       - Jwt__SecretKey=${JWT_SECRET}
       - Jwt__Issuer=Fiutami
       - Jwt__Audience=FiutamiApp
       - Jwt__AccessTokenExpirationMinutes=15
       - Jwt__RefreshTokenExpirationDays=7
-      # OAuth Providers (SECRETS - configure in Portainer)
       - OAuth__Google__ClientId=${GOOGLE_CLIENT_ID:-}
       - OAuth__Facebook__AppId=${FACEBOOK_APP_ID:-}
       - OAuth__Facebook__AppSecret=${FACEBOOK_APP_SECRET:-}
-      # Security settings
       - Security__RateLimiting__PermitLimit=5
       - Security__RateLimiting__WindowSeconds=60
     depends_on:
@@ -77,8 +65,7 @@ services:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: fiutami-db-stage
     restart: unless-stopped
-    ports:
-      - "1435:1433"
+    # NO port exposed externally for security
     environment:
       - ACCEPT_EULA=Y
       - MSSQL_SA_PASSWORD=${DB_PASSWORD}
@@ -88,10 +75,41 @@ services:
     networks:
       - fiutami-stage
     healthcheck:
-      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" || exit 1
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$${MSSQL_SA_PASSWORD}" -C -Q "SELECT 1" || exit 1
       interval: 30s
       timeout: 10s
       retries: 5
+      start_period: 30s
+
+  backoffice:
+    image: ghcr.io/fiutami/backoffice:${IMAGE_TAG:-stage}
+    container_name: fiutami-backoffice-stage
+    restart: unless-stopped
+    ports:
+      - "8055:8055"
+    environment:
+      - DB_CLIENT=mssql
+      - DB_HOST=fiutami-db-stage
+      - DB_PORT=1433
+      - DB_DATABASE=fiutami_stage
+      - DB_USER=sa
+      - DB_PASSWORD=${DB_PASSWORD}
+      - KEY=${DIRECTUS_KEY}
+      - SECRET=${DIRECTUS_SECRET}
+      - ADMIN_EMAIL=${DIRECTUS_ADMIN_EMAIL:-admin@fiutami.pet}
+      - ADMIN_PASSWORD=${DIRECTUS_ADMIN_PASSWORD:-}
+      - PUBLIC_URL=https://bo.stage.fiutami.pet
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - fiutami-stage
+      - proxy-net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8055/server/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
       start_period: 30s
 
 networks:
