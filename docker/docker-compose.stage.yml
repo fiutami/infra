@@ -20,7 +20,7 @@ services:
       - "8082:80"
     networks:
       - fiutami-stage
-      - proxy-net
+      - fiutami-public
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
       interval: 30s
@@ -53,7 +53,7 @@ services:
         condition: service_healthy
     networks:
       - fiutami-stage
-      - proxy-net
+      - fiutami-public
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/5000'"]
       interval: 30s
@@ -104,7 +104,7 @@ services:
         condition: service_healthy
     networks:
       - fiutami-stage
-      - proxy-net
+      - fiutami-public
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8055/server/health"]
       interval: 30s
@@ -115,7 +115,7 @@ services:
 networks:
   fiutami-stage:
     driver: bridge
-  proxy-net:
+  fiutami-public:
     external: true
 
 volumes:
