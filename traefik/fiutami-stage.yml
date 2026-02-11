@@ -1,0 +1,52 @@
+# =============================================================================
+# FIUTAMI Staging - Traefik Dynamic Configuration
+# =============================================================================
+# Deploy to: /opt/leo-platform/leo-infra/docker/traefik/dynamic/fiutami-stage.yml
+# Server: 91.99.229.111 (LEXe staging)
+# Network: fiutami-public (isolata da LEO/LEXE)
+# Traefik deve essere connesso a questa rete
+
+http:
+  routers:
+    # Frontend - stage.fiutami.pet
+    fiutami-frontend-stage:
+      rule: "Host(`stage.fiutami.pet`)"
+      entryPoints:
+        - websecure
+      service: fiutami-frontend-stage
+      tls:
+        certResolver: letsencrypt
+
+    # Backend API - api.stage.fiutami.pet
+    fiutami-api-stage:
+      rule: "Host(`api.stage.fiutami.pet`)"
+      entryPoints:
+        - websecure
+      service: fiutami-api-stage
+      tls:
+        certResolver: letsencrypt
+
+    # Backoffice - bo.stage.fiutami.pet
+    fiutami-backoffice-stage:
+      rule: "Host(`bo.stage.fiutami.pet`)"
+      entryPoints:
+        - websecure
+      service: fiutami-backoffice-stage
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    fiutami-frontend-stage:
+      loadBalancer:
+        servers:
+          - url: "http://fiutami-frontend-stage:80"
+
+    fiutami-api-stage:
+      loadBalancer:
+        servers:
+          - url: "http://fiutami-backend-stage:5000"
+
+    fiutami-backoffice-stage:
+      loadBalancer:
+        servers:
+          - url: "http://fiutami-backoffice-stage:8055"

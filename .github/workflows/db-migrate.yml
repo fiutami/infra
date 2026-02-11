@@ -1,0 +1,92 @@
+name: Database Migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - stage
+          - prod
+      dry_run:
+        description: 'Dry run (show pending migrations only)'
+        required: false
+        type: boolean
+        default: true
+
+# Prevent concurrent runs
+concurrency:
+  group: db-migrate-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Run Migrations (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install EF Core tools
+        run: dotnet tool install --global dotnet-ef
+
+      - name: Restore dependencies
+        working-directory: backend
+        run: dotnet restore
+
+      - name: Build
+        working-directory: backend
+        run: dotnet build --no-restore
+
+      - name: List pending migrations (dry run)
+        if: inputs.dry_run == true
+        working-directory: backend
+        run: |
+          echo "Pending migrations:"
+          dotnet ef migrations list --project src/Fiutami.Infrastructure --startup-project src/Fiutami.API | grep -A 100 "(Pending)" || echo "No pending migrations"
+        env:
+          ConnectionStrings__DefaultConnection: ${{ secrets.DB_CONNECTION_STRING }}
+
+      - name: Run migrations
+        if: inputs.dry_run == false
+        working-directory: backend
+        run: |
+          echo "Running migrations on ${{ inputs.environment }}..."
+          dotnet ef database update --project src/Fiutami.Infrastructure --startup-project src/Fiutami.API
+          echo "Migrations completed!"
+        env:
+          ConnectionStrings__DefaultConnection: ${{ secrets.DB_CONNECTION_STRING }}
+
+      - name: Verify migration
+        if: inputs.dry_run == false
+        working-directory: backend
+        run: |
+          echo "Verifying migrations..."
+          dotnet ef migrations list --project src/Fiutami.Infrastructure --startup-project src/Fiutami.API
+        env:
+          ConnectionStrings__DefaultConnection: ${{ secrets.DB_CONNECTION_STRING }}
+
+  sync-to-stage:
+    name: Sync Prod to Stage
+    runs-on: ubuntu-latest
+    if: inputs.environment == 'prod' && inputs.dry_run == false
+    needs: migrate
+    environment: stage
+
+    steps:
+      - name: Notify about sync
+        run: |
+          echo "Migration applied to prod."
+          echo "To sync prod data to stage, run:"
+          echo "  ./infra/scripts/sync-prod-to-stage.sh"
+          echo ""
+          echo "Or use the 'Sync Prod to Stage' workflow."

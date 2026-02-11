@@ -1,0 +1,122 @@
+name: Sync Prod DB to Stage
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "SYNC" to confirm (this will OVERWRITE staging DB)'
+        required: true
+        type: string
+
+# Prevent concurrent runs
+concurrency:
+  group: db-sync
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate Confirmation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation
+        if: inputs.confirm != 'SYNC'
+        run: |
+          echo "ERROR: You must type 'SYNC' to confirm this action"
+          echo "This workflow will OVERWRITE the staging database with production data"
+          exit 1
+
+  sync:
+    name: Sync Database
+    runs-on: ubuntu-latest
+    needs: validate
+    environment: stage
+
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PROD_SSH_KEY }}" > ~/.ssh/id_prod
+          echo "${{ secrets.STAGE_SSH_KEY }}" > ~/.ssh/id_stage
+          chmod 600 ~/.ssh/id_prod ~/.ssh/id_stage
+
+      - name: Create backup on Production
+        run: |
+          BACKUP_FILE="fiutami_sync_$(date +%Y%m%d_%H%M%S).bak"
+          echo "Creating backup: $BACKUP_FILE"
+
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_prod root@49.12.85.92 << EOF
+            source /opt/fra/fiutami/.env
+            docker exec fiutami-db-prod mkdir -p /var/opt/mssql/backup
+            docker exec fiutami-db-prod /opt/mssql-tools18/bin/sqlcmd \
+              -S localhost -U sa -P "\$DB_PASSWORD" -C \
+              -Q "BACKUP DATABASE [fiutami_prod] TO DISK='/var/opt/mssql/backup/$BACKUP_FILE' WITH FORMAT, COMPRESSION"
+          EOF
+
+          echo "BACKUP_FILE=$BACKUP_FILE" >> $GITHUB_ENV
+
+      - name: Copy backup to local
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_prod root@49.12.85.92 \
+            "docker cp fiutami-db-prod:/var/opt/mssql/backup/${{ env.BACKUP_FILE }} /tmp/${{ env.BACKUP_FILE }}"
+
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/id_prod \
+            root@49.12.85.92:/tmp/${{ env.BACKUP_FILE }} /tmp/${{ env.BACKUP_FILE }}
+
+      - name: Copy backup to Staging
+        run: |
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/id_stage \
+            /tmp/${{ env.BACKUP_FILE }} root@91.99.229.111:/tmp/${{ env.BACKUP_FILE }}
+
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_stage root@91.99.229.111 << EOF
+            docker exec fiutami-db-stage mkdir -p /var/opt/mssql/backup
+            docker cp /tmp/${{ env.BACKUP_FILE }} fiutami-db-stage:/var/opt/mssql/backup/${{ env.BACKUP_FILE }}
+            rm -f /tmp/${{ env.BACKUP_FILE }}
+          EOF
+
+      - name: Restore on Staging
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_stage root@91.99.229.111 << EOF
+            source /opt/fiutami/.env
+
+            # Kill connections and restore
+            docker exec fiutami-db-stage /opt/mssql-tools18/bin/sqlcmd \
+              -S localhost -U sa -P "\$DB_PASSWORD" -C \
+              -Q "ALTER DATABASE [fiutami_stage] SET SINGLE_USER WITH ROLLBACK IMMEDIATE" 2>/dev/null || true
+
+            # Fix permissions (docker cp creates root-owned files)
+            docker exec -u root fiutami-db-stage chown mssql:root /var/opt/mssql/backup/${{ env.BACKUP_FILE }}
+
+            docker exec fiutami-db-stage /opt/mssql-tools18/bin/sqlcmd \
+              -S localhost -U sa -P "\$DB_PASSWORD" -C \
+              -Q "RESTORE DATABASE [fiutami_stage] FROM DISK='/var/opt/mssql/backup/${{ env.BACKUP_FILE }}'
+                  WITH REPLACE,
+                  MOVE 'FIUTAMI' TO '/var/opt/mssql/data/fiutami_stage.mdf',
+                  MOVE 'FIUTAMI_log' TO '/var/opt/mssql/data/fiutami_stage_log.ldf'"
+
+            docker exec fiutami-db-stage /opt/mssql-tools18/bin/sqlcmd \
+              -S localhost -U sa -P "\$DB_PASSWORD" -C \
+              -Q "ALTER DATABASE [fiutami_stage] SET MULTI_USER"
+
+            # Cleanup
+            docker exec fiutami-db-stage rm -f /var/opt/mssql/backup/${{ env.BACKUP_FILE }}
+          EOF
+
+      - name: Cleanup Production backup
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_prod root@49.12.85.92 << EOF
+            rm -f /tmp/${{ env.BACKUP_FILE }}
+            docker exec fiutami-db-prod rm -f /var/opt/mssql/backup/${{ env.BACKUP_FILE }}
+          EOF
+
+      - name: Verify Sync
+        run: |
+          echo "Verifying sync..."
+          TABLES=$(ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_stage root@91.99.229.111 << 'EOF'
+            source /opt/fiutami/.env
+            docker exec fiutami-db-stage /opt/mssql-tools18/bin/sqlcmd \
+              -S localhost -U sa -P "$DB_PASSWORD" -C -d fiutami_stage \
+              -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'" -h -1
+          EOF
+          )
+          echo "Staging database has $TABLES tables"
+          echo "Sync completed successfully!"
