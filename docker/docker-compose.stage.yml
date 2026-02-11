@@ -22,7 +22,7 @@ services:
       - fiutami-stage
       - proxy-net
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -55,7 +55,7 @@ services:
       - fiutami-stage
       - proxy-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/5000'"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -106,7 +106,7 @@ services:
       - fiutami-stage
       - proxy-net
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8055/server/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8055/server/health"]
       interval: 30s
       timeout: 10s
       retries: 3
