@@ -227,3 +227,98 @@ tail -f /var/log/fiutami-sync.log  # Monitor log
 | **infra** | Docker, CI/CD ← SEI QUI |
 | testing | Playwright E2E |
 | docs | Documentazione |
+
+## Troubleshooting
+
+### Healthcheck Fallisce
+**Sintomo**: Container mostra `(unhealthy)` ma il servizio risponde.
+
+**Causa**: `localhost` non risolve correttamente nei container Alpine/Debian.
+
+**Fix**: Usare `127.0.0.1` invece di `localhost` negli healthcheck:
+```yaml
+# ❌ Non funziona
+test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
+
+# ✅ Funziona
+test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+```
+
+**Backend .NET**: Non ha curl/wget, usare bash:
+```yaml
+test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/5000'"]
+```
+
+### Backend Auth Non Funziona (JWT Error)
+**Sintomo**: `IDX10703: Cannot create SymmetricSecurityKey, key length is zero`
+
+**Causa**: `JWT_SECRET` non passato al container (CI deploy senza .env).
+
+**Diagnosi**:
+```bash
+docker inspect fiutami-backend-prod --format '{{range .Config.Env}}{{println .}}{{end}}' | grep Jwt__SecretKey
+# Se vuoto → problema confermato
+```
+
+**Fix**: Ricreare container con docker compose (legge .env):
+```bash
+cd /opt/fra/fiutami  # o /opt/fiutami per stage
+source .env
+docker stop fiutami-backend-prod && docker rm fiutami-backend-prod
+docker compose -p fiutami-prod -f docker-compose.prod.yml up -d --no-deps backend
+```
+
+### DB Staging Bloccato (SINGLE_USER)
+**Sintomo**: Auth fallisce su staging, errori `database can only have one user`
+
+**Causa**: Sync interrotto ha lasciato DB in SINGLE_USER mode.
+
+**Diagnosi**:
+```bash
+source /opt/fiutami/.env
+docker exec fiutami-db-stage /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$DB_PASSWORD" -C \
+  -Q "SELECT user_access_desc FROM sys.databases WHERE name = 'fiutami_stage'"
+# Se mostra SINGLE_USER → problema confermato
+```
+
+**Fix**:
+```bash
+docker exec fiutami-db-stage /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$DB_PASSWORD" -C -d master -Q "
+DECLARE @kill varchar(8000) = '';
+SELECT @kill = @kill + 'KILL ' + CONVERT(varchar(5), session_id) + ';'
+FROM sys.dm_exec_sessions WHERE database_id = DB_ID('fiutami_stage');
+EXEC(@kill);
+ALTER DATABASE [fiutami_stage] SET MULTI_USER;
+"
+```
+
+### Container Nome Sbagliato (Traefik 502)
+**Sintomo**: Traefik ritorna 502, container ha prefisso hash (es. `0618d860a285_fiutami-frontend-stage`)
+
+**Causa**: Docker compose ha creato container con nome conflittuale.
+
+**Fix**:
+```bash
+docker stop <container_con_hash>
+docker rm <container_con_hash>
+cd /opt/fiutami
+docker compose -p fiutami-stage -f docker-compose.stage.yml up -d --no-deps <service>
+docker network connect fiutami-public fiutami-<service>-stage
+```
+
+### Verificare Stato Completo
+```bash
+# Containers
+docker ps --format 'table {{.Names}}\t{{.Status}}' | grep fiutami
+
+# Endpoints
+for url in fiutami.pet api.fiutami.pet bo.fiutami.pet stage.fiutami.pet api.stage.fiutami.pet bo.stage.fiutami.pet; do
+  echo "$url → $(curl -sL -o /dev/null -w '%{http_code}' https://$url)"
+done
+
+# Sync log
+tail -20 /var/log/fiutami-sync.log
+
+# DB POI count
+docker exec fiutami-db-prod /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$DB_PASSWORD" -C -d fiutami_prod -Q "SELECT COUNT(*) FROM POI_Points" -h -1
+```
