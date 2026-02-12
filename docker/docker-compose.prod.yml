@@ -46,6 +46,9 @@ services:
       - OAuth__Google__ClientId=${GOOGLE_CLIENT_ID:-}
       - OAuth__Facebook__AppId=${FACEBOOK_APP_ID:-}
       - OAuth__Facebook__AppSecret=${FACEBOOK_APP_SECRET:-}
+      - OpenRouter__ApiKey=${OPENROUTER_API_KEY}
+      - OpenRouter__Model=${OPENROUTER_MODEL:-google/gemini-2.0-flash-001}
+      - OpenRouter__MaxTokens=${OPENROUTER_MAX_TOKENS:-1024}
       - Security__RateLimiting__PermitLimit=5
       - Security__RateLimiting__WindowSeconds=60
     depends_on:

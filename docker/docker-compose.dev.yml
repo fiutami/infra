@@ -35,6 +35,9 @@ services:
       - Jwt__Issuer=Fiutami
       - Jwt__Audience=FiutamiApp
       - OAuth__Google__ClientId=384947883378-eghthqhqvoau0m0ubqstvr9baq0pbtbb.apps.googleusercontent.com
+      - OpenRouter__ApiKey=${OPENROUTER_API_KEY:-}
+      - OpenRouter__Model=${OPENROUTER_MODEL:-google/gemini-2.0-flash-001}
+      - OpenRouter__MaxTokens=${OPENROUTER_MAX_TOKENS:-1024}
     depends_on:
       - db
     networks:

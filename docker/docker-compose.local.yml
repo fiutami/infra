@@ -25,6 +25,9 @@ services:
       - Jwt__Audience=FiutamiApp
       - Jwt__AccessTokenExpirationMinutes=15
       - Jwt__RefreshTokenExpirationDays=7
+      - OpenRouter__ApiKey=${OPENROUTER_API_KEY:-}
+      - OpenRouter__Model=${OPENROUTER_MODEL:-google/gemini-2.0-flash-001}
+      - OpenRouter__MaxTokens=${OPENROUTER_MAX_TOKENS:-1024}
     depends_on:
       db:
         condition: service_healthy

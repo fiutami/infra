@@ -211,7 +211,7 @@ npm run docker:build           # Build Docker image
 
 **Access:**
 - Production: `https://bo.fiutami.pet`
-- Stage: `https://play.francescotrani.com/backoffice` (TBD)
+- Stage: `https://stage.fiutami.pet/backoffice` (TBD)
 
 ---
 
@@ -226,7 +226,7 @@ infra/
 │   ├── docker-compose.yml           # Base configuration
 │   ├── docker-compose.local.yml     # Local development
 │   ├── docker-compose.dev.yml       # Development environment
-│   ├── docker-compose.stage.yml     # Staging (play.francescotrani.com)
+│   ├── docker-compose.stage.yml     # Staging (stage.fiutami.pet)
 │   └── docker-compose.prod.yml      # Production (fiutami.pet)
 ├── .github/workflows/
 │   ├── reusable-docker-build.yml    # Build & push Docker images
@@ -283,7 +283,7 @@ jobs:
 │  │  • fiutami.pet → frontend:8080                          │   │
 │  │  • api.fiutami.pet → backend:5000                       │   │
 │  │  • bo.fiutami.pet → backoffice:8055                     │   │
-│  │  • play.francescotrani.com → frontend-stage:8082        │   │
+│  │  • stage.fiutami.pet → frontend-stage:8082        │   │
 │  └─────────────────────────────────────────────────────────┘   │
 └────────────────────────┬────────────────────────────────────────┘
                          │
@@ -442,12 +442,12 @@ GHCR_TOKEN          # GitHub Container Registry token
 ### Staging Environment
 
 **Branch:** `stage`
-**Domain:** `play.francescotrani.com` (alias)
+**Domain:** `stage.fiutami.pet` (alias)
 
 | Service | URL | Port | SSL |
 |---------|-----|------|-----|
-| Frontend (Web App) | https://play.francescotrani.com | 443 | ✅ |
-| Backend API | https://play.francescotrani.com:5001 | 5001 | ⚠️ |
+| Frontend (Web App) | https://stage.fiutami.pet | 443 | ✅ |
+| Backend API | https://stage.fiutami.pet:5001 | 5001 | ⚠️ |
 | Backoffice CMS | TBD | - | - |
 
 **Internal Ports:**

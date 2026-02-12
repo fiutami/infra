@@ -209,7 +209,7 @@ tail -f /var/log/fiutami-sync.log  # Monitor log
 |-----|--------|
 | `~/.ssh/id_hetzner` | Production (49.12.85.92) |
 | `~/.ssh/id_stage_new` | Staging (91.99.229.111) |
-| `~/.ssh/id_ssdnas` | Old server (play.francescotrani.com) |
+| `~/.ssh/id_ssdnas` | Old server (stage.fiutami.pet) |
 
 ## Environments
 | Branch | Deploy Target |
