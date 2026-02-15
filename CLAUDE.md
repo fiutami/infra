@@ -158,51 +158,47 @@ docker exec -it fiutami-db-prod /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa
 ```
 
 ### Sync Prod → Stage
-Il database di staging viene sincronizzato automaticamente con quello di produzione.
 
-#### Sync Automatico (ogni 15 minuti)
-- **Cron Job**: `*/15 * * * *` sul server prod
-- **Script**: `/opt/fra/fiutami/scripts/sync-to-stage.sh`
-- **Log**: `/var/log/fiutami-sync.log`
-- **Lock file**: `/tmp/fiutami-sync.lock` (previene esecuzioni concorrenti)
-
-#### Sync Manuale
-
-1. **Via script locale**:
+#### Sync NON-DISTRUTTIVO (raccomandato)
+Usa MERGE (upsert) per sincronizzare dati senza distruggere schema/migrazioni di staging.
 ```bash
-./infra/scripts/sync-prod-to-stage.sh
-# Con dry-run: ./infra/scripts/sync-prod-to-stage.sh --dry-run
+# Dal server prod (49.12.85.92):
+/opt/fra/fiutami/scripts/import-prod-data.sh              # Full import
+/opt/fra/fiutami/scripts/import-prod-data.sh --dry-run    # Preview only
+
+# Tabelle sincronizzate: Auth_Users, Pet_Species, Pet_Breeds, Pet_Pets
 ```
 
-2. **Via GitHub Actions**:
-   - Vai su Actions → "Sync Prod DB to Stage"
-   - Digita "SYNC" per confermare
-   - ATTENZIONE: sovrascrive completamente il DB di staging!
+#### Sync DISTRUTTIVO (DEPRECATO - NON USARE)
+Il vecchio cron job `*/15 * * * *` che faceva RESTORE DATABASE e' stato **DISABILITATO**
+perche' distruggeva le migrazioni e i dati di staging ad ogni esecuzione.
 
-3. **Direttamente sul server prod**:
+Script legacy (non usare):
+- `scripts/sync-to-stage-auto.sh` - Ex cron automatico (DISABILITATO)
+- `scripts/sync-prod-to-stage.sh` - Sync manuale distruttivo (DEPRECATO)
+
+Per disabilitare il cron se ancora attivo:
 ```bash
-ssh -i ~/.ssh/id_hetzner root@49.12.85.92
-/opt/fra/fiutami/scripts/sync-to-stage.sh
-tail -f /var/log/fiutami-sync.log  # Monitor log
+./infra/scripts/disable-destructive-sync.sh
 ```
 
-#### Come Funziona il Sync
-1. Backup del DB prod in `/var/opt/mssql/data/` (non /backup/ per permessi)
-2. Copia backup su host prod via `docker cp`
-3. Trasferimento backup su staging via `scp`
-4. Copia backup nel container staging
-5. `chown mssql:root` per fixare permessi (eseguito con `-u root`)
-6. RESTORE con MOVE dei logical files (`FIUTAMI` → `fiutami_stage.mdf`)
-7. Cleanup dei file temporanei
-
-**Nota**: I logical file names nel backup sono `FIUTAMI` e `FIUTAMI_log`, non `fiutami_prod`.
+### Applicare Migrazioni Manualmente
+```bash
+# Species hierarchy (TaxonRank, ParentSpeciesId, ScientificName + seed)
+./infra/scripts/apply-species-hierarchy.sh prod    # Su produzione
+./infra/scripts/apply-species-hierarchy.sh stage   # Su staging
+```
 
 ### Scripts Disponibili
 | Script | Descrizione |
 |--------|-------------|
 | `scripts/baseline-migrations.sql` | Crea tutte le tabelle EF Core da zero |
-| `scripts/sync-prod-to-stage.sh` | Sincronizza DB prod → stage (locale) |
-| `scripts/sync-to-stage-auto.sh` | Sync automatico (deploy su prod server) |
+| `scripts/apply-species-hierarchy.sql` | Aggiunge colonne species hierarchy + seed dati |
+| `scripts/apply-species-hierarchy.sh` | Wrapper bash per applicare su prod/stage |
+| `scripts/import-prod-data.sh` | Sync non-distruttivo prod → stage (MERGE) |
+| `scripts/disable-destructive-sync.sh` | Disabilita il cron distruttivo |
+| `scripts/sync-prod-to-stage.sh` | DEPRECATO - sync distruttivo (RESTORE) |
+| `scripts/sync-to-stage-auto.sh` | DEPRECATO - ex cron automatico |
 
 ### SSH Keys (local)
 | Key | Server |
