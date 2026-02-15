@@ -23,6 +23,8 @@ http:
       entryPoints:
         - websecure
       service: fiutami-api-stage
+      middlewares:
+        - fiutami-security-headers
       tls:
         certResolver: letsencrypt
 
@@ -50,3 +52,11 @@ http:
       loadBalancer:
         servers:
           - url: "http://fiutami-backoffice-stage:8055"
+
+  middlewares:
+    fiutami-security-headers:
+      headers:
+        customResponseHeaders:
+          X-Content-Type-Options: "nosniff"
+          X-Robots-Tag: "noindex, nofollow"
+        contentSecurityPolicy: "default-src 'self'"
