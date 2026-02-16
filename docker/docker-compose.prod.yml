@@ -58,6 +58,7 @@ services:
       - Storage__MinIO__PhotosBucket=fiutami-photos
       - Storage__MinIO__DocumentsBucket=fiutami-documents
       - Storage__MinIO__AvatarsBucket=fiutami-avatars
+      - Storage__MinIO__Region=${MINIO_REGION:-eu-west-1}
       - Storage__ClamAV__Host=clamav
       - Storage__ClamAV__Port=3310
     volumes:
