@@ -7,13 +7,14 @@
 # Backoffice: https://bo.stage.fiutami.pet (port 8055)
 # DB: internal only
 #
-# IMAGE_TAG: Use environment variable to specify exact image version
-# Example: IMAGE_TAG=sha-abc123 docker compose -p fiutami-stage up -d frontend
+# Per-service image tags (set by CI/CD):
+#   FRONTEND_TAG, BACKEND_TAG, BACKOFFICE_TAG
+# Example: BACKEND_TAG=sha-abc123 docker compose -p fiutami-stage up -d backend
 # =============================================================================
 
 services:
   frontend:
-    image: ghcr.io/fiutami/frontend:${IMAGE_TAG:-stage}
+    image: ghcr.io/fiutami/frontend:${FRONTEND_TAG:-stage}
     container_name: fiutami-frontend-stage
     restart: unless-stopped
     ports:
@@ -29,7 +30,7 @@ services:
       start_period: 10s
 
   backend:
-    image: ghcr.io/fiutami/backend:${IMAGE_TAG:-stage}
+    image: ghcr.io/fiutami/backend:${BACKEND_TAG:-stage}
     container_name: fiutami-backend-stage
     restart: unless-stopped
     ports:
@@ -99,7 +100,7 @@ services:
       start_period: 30s
 
   backoffice:
-    image: ghcr.io/fiutami/backoffice:${IMAGE_TAG:-stage}
+    image: ghcr.io/fiutami/backoffice:${BACKOFFICE_TAG:-stage}
     container_name: fiutami-backoffice-stage
     restart: unless-stopped
     ports:
